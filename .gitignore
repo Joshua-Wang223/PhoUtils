@@ -1,0 +1,25 @@
+# —— Python ——
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# —— CodeBuddy 本机状态（会话、权限等，不入库）——
+.codebuddy/
+
+# —— 编辑器 / 系统 ——
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# —— 本地临时目录（测试素材 / 中间产物）——
+temp/
+tmp/
+
+# —— 照片处理工具的运行产物（本地验证时可能落到仓库里）——
+_duplicates/
+photo_dedup_report.txt
+dup_group*.jpg

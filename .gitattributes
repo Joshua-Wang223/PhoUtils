@@ -1,0 +1,30 @@
+# 统一换行符为 LF —— 仓库里的文件在 Windows / Linux 检出后都是 LF。
+#
+# 为什么不用 core.autocrlf：它是**每台机器的本地配置**（存在 .git/config，不随仓库走），
+# 换台机器就得重设一次。这条规则随仓库分发，任何平台 clone 下来行为一致。
+# 本机已同时设 `git config core.autocrlf false`，避免旧行为残留。
+#
+# 副作用提醒：工作副本也会是 LF。用记事本 / 老版 Visual Studio 打开可能显示成一行，
+# 用 VS Code、PyCharm、Vim 等都没问题。
+* text=auto eol=lf
+
+# 二进制文件不做任何换行符转换（万一将来放进示例素材）
+*.jpg   binary
+*.jpeg  binary
+*.png   binary
+*.gif   binary
+*.webp  binary
+*.tif   binary
+*.tiff  binary
+*.ico   binary
+*.pdf   binary
+*.zip   binary
+*.exe   binary
+*.dll   binary
+
+# 批处理必须 CRLF，否则 cmd.exe 会解析出错（本项目暂无，先占位免得将来踩坑）
+*.cmd   text eol=crlf
+*.bat   text eol=crlf
+
+# PowerShell 脚本用 LF 即可，但 CRLF 更稳妥
+*.ps1   text eol=crlf

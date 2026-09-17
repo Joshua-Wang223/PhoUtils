@@ -371,6 +371,9 @@ PhoUtils 规划作为一个**命令行优先 / Python 原生**的照片工程工
 ```
 PhoUtils/
 ├── README.md                            # 本文件
+├── LICENSE                              # MIT License
+├── .gitignore                           # 忽略 Python 产物 / CodeBuddy 状态 / 工具运行产物
+├── .gitattributes                       # 换行符统一为 LF（不依赖各机器的 core.autocrlf）
 ├── photo_dedup.py                       # 照片去重（字节级 + 感知哈希 + EXIF 时间保护 + 多进程）
 ├── memory/                              # 工程记忆：工具背后的事实与踩坑，索引见 memory/MEMORY.md
 │   ├── MEMORY.md                        #   索引
@@ -465,8 +468,10 @@ PhoUtils/
 
 ## 许可证
 
-本项目采用 **MIT License**（或根据实际情况替换为 Apache-2.0 / GPLv3）。
-详见仓库根目录 `LICENSE` 文件。
+本项目采用 **MIT License**，详见仓库根目录 [`LICENSE`](LICENSE) 文件。
+
+> 换行符统一为 **LF**（见 [`.gitattributes`](.gitattributes)），Windows / Linux 检出一致，
+> 不依赖各机器本地的 `core.autocrlf` 设置。
 
 ---
 

@@ -1,7 +1,8 @@
 # PhoUtils · 照片实用工具集
 
 > 一组 **纯 Python** 的命令行照片整理工具，聚焦 *批量、可复现、安全可回退* 的照片工程任务。
-> 当前提供照片去重 **`photo_dedup.py`**（字节级重复 + 感知哈希近重复 + EXIF 时间保护 + 多进程加速），
+> 当前提供照片去重 **`photo_dedup.py`**（字节级重复 + 感知哈希近重复 + EXIF 时间保护 + 多进程加速）
+> 与 SDR→HDR 批量转换 **`photo_sdr_to_hdr.py`**（8 个开源后端 + 客观质量指标），
 > 后续将逐步扩展批量重命名、EXIF 整理、格式转换等能力。
 
 ---
@@ -14,6 +15,8 @@
 - [安装](#安装)
 - [工具一览](#工具一览)
   - [`photo_dedup.py` — 照片去重](#photo_deduppy--照片去重)
+  - [`photo_sdr_to_hdr.py` — SDR 转 HDR](#photo_sdr_to_hdrpy--sdr-转-hdr)
+  - [`bench_photo_sdr_to_hdr.py` — 基准测试](#bench_photo_sdr_to_hdrpy--基准测试)
 - [快速上手](#快速上手)
 - [常见场景配方](#常见场景配方)
 - [判定阈值与调参](#判定阈值与调参)
@@ -44,19 +47,24 @@
 
 ## 功能矩阵
 
-| 能力 | `photo_dedup.py` | 说明 |
-|---|:---:|---|
-| 字节级重复检测（SHA-256） | ✅ | 先用文件大小预筛，再算哈希；必然重复 |
-| 感知哈希近重复（连拍簇） | ✅ | pHash 256bit + dHash 64bit + aHash 64bit |
-| 旋转匹配 | ✅ | 0° / 90° / 180° / 270° 四向取最小距离，可 `--no-rotation` 关闭 |
-| EXIF 时间保护 | ✅ | `--max-time-gap`（默认 15s），避免"同构图不同时刻"被并簇 |
-| 自动择优保留 | ✅ | 拉普拉斯方差（统一缩放到长边 1024 比较），也可 `--keep first` |
-| 递归子目录 | ✅ | `-r`，自动跳过隔离目录 |
-| 多进程并行 | ✅ | 自动探测核数 + 内存，`--workers 0` 自动 / `1` 串行 / N 指定 |
-| 对比图输出 | ✅ | `--sheet`，每组生成一张横向拼图便于人工复核 |
-| 干跑预览 | ✅ | 默认行为，无需额外参数 |
-| 可回退隔离 | ✅ | `--dup-dir`，默认 `_duplicates/` |
-| 运行报告 | ✅ | 执行后写 `photo_dedup_report.txt` |
+| 能力 | `photo_dedup.py` | `photo_sdr_to_hdr.py` | 说明 |
+|---|:---:|:---:|---|
+| 字节级重复检测（SHA-256） | ✅ | | 先用文件大小预筛，再算哈希；必然重复 |
+| 感知哈希近重复（连拍簇） | ✅ | | pHash 256bit + dHash 64bit + aHash 64bit |
+| 旋转匹配 | ✅ | | 0° / 90° / 180° / 270° 四向取最小距离，可 `--no-rotation` 关闭 |
+| EXIF 时间保护 | ✅ | | `--max-time-gap`（默认 15s），避免"同构图不同时刻"被并簇 |
+| 自动择优保留 | ✅ | | 拉普拉斯方差（统一缩放到长边 1024 比较），也可 `--keep first` |
+| 递归子目录 | ✅ | ✅ | `-r`，自动跳过隔离目录 |
+| 多进程并行 | ✅ | ✅ | 自动探测核数 + 内存，`--workers 0` 自动 / `1` 串行 / N 指定 |
+| 对比图输出 | ✅ | | `--sheet`，每组生成一张横向拼图便于人工复核 |
+| 干跑预览 | ✅ | ✅ | 默认行为，无需额外参数 |
+| 可回退隔离 | ✅ | | `--dup-dir`，默认 `_duplicates/` |
+| 运行报告 | ✅ | ✅ | 执行后写 `photo_dedup_report.txt` / `photo_sdr_to_hdr_report.txt` |
+| 多后端模型 | | ✅ | 8 个开源 SDR→HDR 后端，可多选并行对比 |
+| UltraHDR/Gainmap 封装 | | ✅ | UltraHDR JPEG / ISO 21496-1 Gainmap JPEG |
+| 线性 HDR 输出 | | ✅ | OpenEXR half-float（纯 Python 读写器） |
+| EXIF 透传（A+C） | | ✅ | JPEG/PNG 原生注入 + EXR header 属性 + sidecar |
+| 客观质量指标 | | ✅ | VMAF / PU21 / ∆ICtCp / SSIM / 动态范围（bench） |
 
 ---
 
@@ -67,6 +75,18 @@
 - **numpy**（DCT、拉普拉斯方差）
 
 实测环境：Python 3.12.9 / Pillow 12.3.0 / numpy 2.5.0，Windows 11。
+
+### `photo_sdr_to_hdr.py` 的额外依赖（按后端懒加载）
+
+| 后端 | 需要安装 |
+|---|---|
+| `pyultrahdr` / `sdr2hdr` | 无（核心依赖已够） |
+| `hdrconv` | `pip install hdr-conversion` |
+| `unet-onnx` | `pip install onnxruntime`（CUDA 用 `onnxruntime-gpu`；≥5GB 可用内存） |
+| `gmnet` | `pip install torch`（检查点 7.7MB 自动下载） |
+| `lumi-*` | `pip install torch diffusers transformers peft accelerate safetensors`（模型需手动下载，见 `--help`） |
+| `ultrahdr` | 编译 libultrahdr 的 `ultrahdr_app` 并放入 PATH 或设 `ULTRHDR_APP_PATH` |
+| bench 的 VMAF | ffmpeg（含 libvmaf；缺失时自动跳过该指标） |
 
 ---
 
@@ -143,6 +163,122 @@ pip install pillow numpy
 
 - 控制台：分阶段结论 + 每组保留/冗余 + 清晰度数值 + 耗时统计
 - 文件：照片目录下 `photo_dedup_report.txt`（与屏幕上内容一致，便于归档）
+
+---
+
+### `photo_sdr_to_hdr.py` — SDR 转 HDR
+
+把普通 SDR 照片批量转换为 HDR，集成 8 个开源后端，默认输出线性 OpenEXR（half-float），
+也可输出 UltraHDR JPEG / ISO 21496-1 Gainmap JPEG / 16bit PNG。
+
+#### 后端一览（`--models`）
+
+| 标识符 | 来源 | 类型 | 依赖 | 说明 |
+|---|---|---|---|---|
+| `pyultrahdr` | [hanfeisun/pyultrahdr](https://github.com/hanfeisun/pyultrahdr) | 纯 Python | 无（仅 numpy+Pillow） | 手写 UltraHDR 组装，ITM 提升曲线 |
+| `hdrconv` | [Jackchou00/hdr-conversion](https://github.com/Jackchou00/hdr-conversion) | Python 库 | `pip install hdr-conversion` | ISO 21496-1 / UltraHDR 规范封装 |
+| `unet-onnx` | [zhuiber/SDR-to-HDR-Reconstruction-System](https://github.com/zhuiber/SDR-to-HDR-Reconstruction-System) | ONNX 模型 | `pip install onnxruntime` | U-Net 深度学习重建（4K，需 ≥5GB 内存或 CUDA） |
+| `lumi-qwen` | [oumad/LumiPic](https://github.com/oumad/LumiPic) | 扩散模型 | torch/diffusers/peft | Qwen-Image-Edit LoRA（bf16 需 ~24GB 显存） |
+| `lumi-klein4b` | 同上 | 扩散模型 | 同上 | FLUX.2-klein-4B LoRA（Apache 2.0，~12GB） |
+| `lumi-klein9b` | 同上 | 扩散模型 | 同上 | FLUX.2-klein-9B LoRA（gated 需授权，~20GB） |
+| `gmnet` | [qtlark/GMNet](https://github.com/qtlark/GMNet) | PyTorch 模型 | torch | ICLR2025 双分支增益图预测（检查点 7.7MB 自动下载） |
+| `sdr2hdr` | [guofei9987/sdr2hdr](https://github.com/guofei9987/sdr2hdr) | ICC 嵌入 | 无 | vendor 的 ICC 配置嵌入（显示技巧，非重建） |
+| `ultrahdr` | [google/libultrahdr](https://github.com/google/libultrahdr) | C++ CLI | 需编译 `ultrahdr_app` | Google 官方参考实现封装 |
+
+模型/配置自动下载到 `models/<后端名>/`（已 gitignore）；不可用的后端在运行时给出
+明确原因并跳过，不影响其他后端。
+
+#### 参数
+
+| 参数 | 默认 | 说明 |
+|---|---|---|
+| `-i`, `--input` | 必填 | 输入文件或目录（可多个） |
+| `-o`, `--output` | 自动 | 输出目录（默认 `<输入>/_hdr_output/`） |
+| `--models` | `hdrconv` | 后端选择（可多个，如 `--models pyultrahdr gmnet` 对比） |
+| `--format` | `exr` | `exr`/`jpg`/`png`/`ultrahdr`/`gainmap` |
+| `--gain-map-method` | `auto` | ITM 曲线：`auto`/`linear`/`log`/`fixed` |
+| `--target-nits` | 1000 | 目标峰值亮度 |
+| `--quantization` | `none` | LumiPic 量化：`none`(bf16)/`8bit`/`4bit` |
+| `--colorspace` | `linear-rec709` | 输出色彩空间标注 |
+| `--device` | `auto` | `auto`/`cuda`/`cpu`/`mps` |
+| `-w`, `--workers` | 0 | 并行进程数（0=自动） |
+| `--suffix` | `_hdr` | 输出文件名后缀（多后端时自动加 `_<后端名>`） |
+| `-r`, `--recursive` | off | 递归子目录 |
+| `--keep-exif` / `--no-keep-exif` | 保留 | EXIF 透传（A+C 方案） |
+| `--sidecar` / `--no-sidecar` | 写 | `.exif.json` 旁车文件 |
+| `--model-dir` | `./models` | 模型存储目录 |
+| `--sdr2hdr-mode` | 1 | sdr2hdr ICC 模式（1/2） |
+| `--ultrahdr-binary` | 自动查找 | ultrahdr_app 路径 |
+| `--log` | `-` | 日志文件（`-`=stdout） |
+| `--apply` | off | 执行转换（**不加即干跑预览**） |
+
+#### 快速上手
+
+```bash
+# 1) 干跑预览（默认，不写任何文件）
+python photo_sdr_to_hdr.py -i ./photos --models pyultrahdr
+
+# 2) 执行：UltraHDR JPEG（HDR 显示器可见，SDR 设备正常显示）
+python photo_sdr_to_hdr.py -i ./photos -o ./hdr --models pyultrahdr \
+    --format ultrahdr --apply
+
+# 3) 执行：线性 EXR（专业工作流，DaVinci/Nuke/Blender）
+python photo_sdr_to_hdr.py -i ./photos -o ./hdr --models gmnet --apply
+
+# 4) 多后端对比（同图多输出，文件名带后端后缀）
+python photo_sdr_to_hdr.py -i ./photos -o ./hdr_compare \
+    --models pyultrahdr hdrconv gmnet --apply
+
+# 5) 激进/保守提升曲线
+python photo_sdr_to_hdr.py -i ./photos --models pyultrahdr \
+    --gain-map-method fixed --target-nits 2000 --apply
+```
+
+#### 安全设计
+
+- **默认干跑**：不加 `--apply` 绝不写文件；干跑会列出将生成的输出路径
+- **输出不覆盖**：重名自动加 `_1`、`_2` 后缀
+- **单文件失败不中断**：记录错误继续批处理，报告汇总失败详情
+- **模型故障隔离**：单个后端不可用不影响其他后端与主流程
+
+---
+
+### `bench_photo_sdr_to_hdr.py` — 基准测试
+
+对全部后端跑 11 组共 93 项测试（自动跳过环境不可用的项），产出 JSON + Markdown 报告。
+
+```bash
+python bench_photo_sdr_to_hdr.py                 # 全量
+python bench_photo_sdr_to_hdr.py --quick         # 冒烟子集
+python bench_photo_sdr_to_hdr.py --backends pyultrahdr gmnet
+```
+
+| 组 | 内容 |
+|---|---|
+| A | 后端可用性矩阵（不可用记 SKIP + 原因） |
+| B | 输出格式矩阵：EXR/JPEG/PNG/UltraHDR/Gainmap 结构合法性（MPF/XMP/EXIF/eXIf） |
+| C | 增益图方法对比：动态范围 stops、分域提升量 |
+| D | 目标峰值亮度：峰值精度、截断率 |
+| E | EXIF 保留矩阵：keep/no-keep × sidecar × 格式 |
+| F | 并行扩展：workers 1/4/auto 吞吐对比 |
+| G | 干跑安全性：零文件写入 |
+| H | 确定性：同输入两次转换字节一致 |
+| I | **无参考客观质量**：Round-trip VMAF + SSIM/PSNR + DR 统计 |
+| J | **全参考客观质量**：∆ICtCp PSNR（BT.2124）+ PU21 PSNR/SSIM |
+| K | 资源占用：子进程峰值 RSS |
+
+#### 客观质量指标（`utils/hdr_metrics.py`）
+
+对标视频质量评价 VMAF 的思路，为 SDR→HDR 提供可量化维度：
+
+- **Round-trip VMAF**（ffmpeg libvmaf）：tonemap(HDR) → SDR 后与原图比，
+  衡量"HDR 在 SDR 显示器上是否忠于原图"（100 = 无感知损失）
+- **∆ICtCp PSNR**（ITU-R BT.2124）：HDR 标准化官方指标，ICtCp 感知域 MSE
+- **PU21 PSNR/SSIM**（Mantiuk & Azimi, PCS 2021）：感知均匀编码后用 SDR 指标口径
+- **动态范围/截断/提升分布**：DR stops、clip rate、分域 log2 增益
+
+> VMAF 实测注意事项（已文档化于源码）：必须多帧输入（单帧会触发 libvmaf 帧同步异常）；
+> 对平滑色调变化不敏感（设计使然，需结合 SSIM/PSNR 解读）；静态内容相同图得分 ~97.4 为已知地板。
 
 ---
 
@@ -348,6 +484,8 @@ PhoUtils 规划作为一个**命令行优先 / Python 原生**的照片工程工
 | 模块 | 状态 | 说明 |
 |---|---|---|
 | `photo_dedup.py` | ✅ 已发布 | 照片去重：字节级 + 感知哈希 + EXIF 时间保护 + 多进程 |
+| `photo_sdr_to_hdr.py` | ✅ 已发布 | SDR→HDR 批量转换：8 个开源后端 + UltraHDR/EXR 输出 + 客观质量指标 |
+| `bench_photo_sdr_to_hdr.py` | ✅ 已发布 | 综合基准：11 组 93 项，VMAF/PU21/∆ICtCp 等客观指标 |
 | `photo_rename.py` | 🚧 规划中 | 按 EXIF 拍摄时间批量重命名（含时区/序号模板），自动处理重名 |
 | `photo_organize.py` | 🚧 规划中 | 按日期/相机/事件归档到 `YYYY/MM/DD` 目录树 |
 | `photo_exif.py` | 🚧 规划中 | EXIF 批量查询 / 清洗 / 迁移（含隐私字段脱敏） |
@@ -371,10 +509,33 @@ PhoUtils 规划作为一个**命令行优先 / Python 原生**的照片工程工
 ```
 PhoUtils/
 ├── README.md                            # 本文件
+├── IMPLEMENTATION_PLAN.md               # photo_sdr_to_hdr 立项与实施方案（含实测数据）
+├── TEST_COVERAGE.md                     # 后端测试覆盖报告（覆盖矩阵 + 解锁路径）
 ├── LICENSE                              # MIT License
-├── .gitignore                           # 忽略 Python 产物 / CodeBuddy 状态 / 工具运行产物
+├── .gitignore                           # 忽略 Python 产物 / CodeBuddy 状态 / 工具运行产物 / models/
 ├── .gitattributes                       # 换行符统一为 LF（不依赖各机器的 core.autocrlf）
 ├── photo_dedup.py                       # 照片去重（字节级 + 感知哈希 + EXIF 时间保护 + 多进程）
+├── photo_sdr_to_hdr.py                  # SDR→HDR 批量转换主 CLI（8 后端 / UltraHDR / EXR）
+├── bench_photo_sdr_to_hdr.py            # 综合基准测试（11 组 93 项 + 客观质量指标）
+├── backends/                            # SDR→HDR 后端实现
+│   ├── base.py                          #   抽象基类 + BackendRegistry 工厂
+│   ├── pyultrahdr_backend.py            #   纯 Python UltraHDR（vendor hanfeisun/pyultrahdr）
+│   ├── hdrconv_backend.py               #   hdr-conversion 库封装（ISO 21496-1 / UltraHDR）
+│   ├── unet_onnx_backend.py             #   U-Net ONNX（unet4k.onnx 自动下载）
+│   ├── lumipic_backend.py               #   LumiPic 扩散 LoRA 三变体（qwen/klein4b/klein9b）
+│   ├── gmnet_backend.py                 #   GMNet ICLR2025（架构 vendor + 检查点下载）
+│   └── subprocess_backend.py            #   子进程基类 + sdr2hdr（ICC）+ ultrahdr（CLI）
+├── utils/                               # 共享工具层
+│   ├── itm.py                           #   逆色调映射核心（auto/linear/log/fixed）
+│   ├── exif.py                          #   EXIF A+C：提取/注入/EXR 属性/sidecar
+│   ├── exr_io.py                        #   纯 Python EXR 读写（half-float 无压缩）
+│   ├── png16.py                         #   16-bit PNG 写入（含 eXIf chunk）
+│   ├── hdr_metrics.py                   #   客观质量指标（VMAF/PU21/∆ICtCp/SSIM/DR）
+│   ├── file_io.py / device.py / parallel.py / logging.py / report.py
+├── models/                              # 模型权重（gitignore；首次运行自动下载）
+│   ├── unet-onnx/unet4k.onnx            #   U-Net ONNX 7.4MB
+│   ├── gmnet/G_realworld.pth            #   GMNet 检查点 7.7MB
+│   └── sdr2hdr/icc1.icc, icc2.icc       #   sdr2hdr ICC 配置
 ├── memory/                              # 工程记忆：工具背后的事实与踩坑，索引见 memory/MEMORY.md
 │   ├── MEMORY.md                        #   索引
 │   ├── project_cloud_mount_write_hazard.md    # 云挂载盘的写入不可信

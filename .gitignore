@@ -23,3 +23,10 @@ tmp/
 _duplicates/
 photo_dedup_report.txt
 dup_group*.jpg
+
+# —— photo_sdr_to_hdr 的模型权重与运行产物（数 MB~GB，不入库）——
+models/
+bench_out/
+*_hdr_output/
+photo_sdr_to_hdr_report.txt
+*.exif.json
